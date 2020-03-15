@@ -11,23 +11,22 @@ status](https://ci.appveyor.com/api/projects/status/gqp3smc04as3qg85?svg=true)](
 state and is being actively
 developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 
-# RpackageTemplate
+# Assigning traffic to minor roads based on AADT from major roads
 
-Template to form the basis of ITSLeeds R packages
+Readme file for Dissertation project R code.
 
-## Installation
+## Introduction
 
-Install the package with **remotes** as
-follows:
+Bold **remotes** 
+R chunk:
 
 ``` r
 install.packages("remotes") # If you do not already have the remotes package
 remotes::install_github("ITSleeds/RpackageTemplate")
 ```
 
-## Usage
+## List
 
-To create a new package and get it on your computer:
 
   - Create a new repo on GitHub in an appropriate organisation. You can
     use this template by clicking the “[Use this
