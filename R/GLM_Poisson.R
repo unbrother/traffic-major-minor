@@ -136,8 +136,8 @@ osm2 %>% group_by(roadtype) %>%
 
 # Classify as urban or rural
 
-#ni idea
-
+osm_urban <- st_join(osm2, strategi)
+qtm(osm_urban)
 
 # ################################################################# #
 #### Apply Generalised Linear Model                              ####

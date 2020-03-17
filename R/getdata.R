@@ -1,6 +1,6 @@
 
 # ################################################################# #
-#### LOAD LIBRARY AND DEFINE CORE SETTINGS                       ####
+#### LOAD LIBRARIES AND DEFINE CORE SETTINGS                     ####
 # ################################################################# #
 
 ### Clear memory
@@ -21,6 +21,10 @@ library(dplyr)
 
 tmap_mode("view")
 
+# ################################################################# #
+#### GET ROAD OSM DATA                                           ####
+# ################################################################# #
+
 ### Get Roads
 q = opq(getbb("isle of wight, UK")) %>%
   add_osm_feature(key = "highway")
@@ -29,6 +33,16 @@ osm_raw = osmdata_sf(q = q)
 
 saveRDS(osm_raw, "data/osm_raw.Rds")
 osm_raw = readRDS("data/osm_raw.Rds")
+
+
+# ################################################################# #
+#### GET ROAD SHAPEFILES DATA                                    ####
+# ################################################################# #
+
+# Import Strategi shp
+
+strategi <- st_read("data/strategi/urban_region.shp")
+
 
 
 # ################################################################# #
