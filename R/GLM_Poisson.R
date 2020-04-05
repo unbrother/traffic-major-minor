@@ -3,7 +3,7 @@
 # ################################################################# #
 
 ### Clear memory
-rm(len, rowsum, inter)
+
 
 ### Load libraries
 library(RANN)
@@ -81,7 +81,7 @@ osm1 <- osm %>%
   mutate(roadtype = ifelse(highway %in% c("primary","secondary","motorway","trunk"), "major", "minor"))
 
 # ################################################################# #
-#### Assign Road importance with Djikstra algorithm              ####
+#### Assign Road importance with dodgr                           ####
 # ################################################################# #
 
 # CLassify by road importance
@@ -92,11 +92,19 @@ osm_graph <- weight_streetnet(osm1, wt_profile = "motorcar", type_col = "highway
 
 osm_weighted <- osm_graph %>%
   group_by(way_id) %>%
-  summarize(road_importance = sum(1/time_weighted))
+  summarize(road_importance = sum(time_weighted))
 
 
 osm2 <- left_join(osm1, osm_weighted, by = c("osm_id" = "way_id"))
 
+osm2 <- osm2 %>%
+  mutate(road_importance = cut(road_importance,breaks = quantile(road_importance, probs = seq(0, 1, 0.2)),
+                               labels=c("1","2","3","4","5")))
+
+
+osm2$road_importance <- unfactor(osm2$road_importance)
+
+osm2$road_importance <- as.numeric(factor(osm2$road_importance))
 
 end.time <- Sys.time()
 time.taken <- end.time - start.time
@@ -137,24 +145,39 @@ osm2 %>% group_by(roadtype) %>%
 # Classify as urban or rural
 
 osm_urban <- st_join(osm2, strategi)
-qtm(osm_urban)
+osm_urban <- osm_urban %>%
+  mutate(urban = ifelse(LEGEND %in% c("Large Urban Area polygon"), 1, 0))
+
+# qtm(osm_urban)
+
+
+rm(osm, osm1, osm2, osm_graph, osm_weighted, strategi, grump)
+
+# ################################################################# #
+#### Assign AADT from nearest major road                         ####
+# ################################################################# #
+
+
 
 # ################################################################# #
 #### Apply Generalised Linear Model                              ####
 # ################################################################# #
 
+# Can't manage to do this yet.
+
 # AADT = log(route_importance) + (OSM Road Type) + log(AADT on nearest major road) + (Urban or rural)
 
-osm2$highway[osm2$highway %in% "primary_link"] <- "primary"
-osm2$highway[osm2$highway %in% "tertiary_link"] <- "tertiary"
-osm2$highway[osm2$highway %in% "secondary_link"] <- "secondary"
+osm_urban$highway[osm2$highway %in% "primary_link"] <- "primary"
+osm_urban$highway[osm2$highway %in% "tertiary_link"] <- "tertiary"
+osm_urban$highway[osm2$highway %in% "secondary_link"] <- "secondary"
 
-osm_model <- osm2 %>% filter(!is.na(aadt))
+osm_model <- osm_urban %>% filter(!is.na(aadt))
 
+class(osm_model$road_importance)
 
+osm_model$road_importance <- as.numeric(factor(osm_model$road_importance))
 
-summary(fit <- glm(road_importance ~ roadtype + highway, family="poisson", data = osm_model))
-
+summary(fit <- glm(urban ~ roadtype + log(road_importance) + log(aadt), family="poisson", data = osm_model))
 
 
 
@@ -181,8 +204,7 @@ predict(m1, s1, type="response", se.fit=TRUE)
 
 glm()
 
-osm3 <- osm2 %>%
-  mutate(AADT_pred = log(road_importance) +
+
 
 
 

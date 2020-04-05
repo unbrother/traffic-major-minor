@@ -43,7 +43,10 @@ osm_raw = readRDS("data/osm_raw.Rds")
 
 strategi <- st_read("data/strategi/urban_region.shp")
 
+# Global Rural-Urban Mapping Project (GRUMP) from NASA, contains polygons from every urban settlement in the world
 
+grump <- st_read("data/grump/global_urban_extent_polygons_v1.01.shp") # For some reason it does not work
+qtm(grump)
 
 # ################################################################# #
 #### PREP INPUT DATA                                             ####
@@ -53,8 +56,6 @@ strategi <- st_read("data/strategi/urban_region.shp")
 osm <- osm_raw$osm_lines
 points <- osm_raw$osm_points
 polys <- osm_raw$osm_polygons # needed for roundabouts
-
-### DON'T UNDERSTAND THIS SYNTAX
 
 polys <- polys[polys$highway %in% c("living_street","primary","primary_link",
                                     "residential","secondary", "secondary_link",
