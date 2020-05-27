@@ -45,8 +45,8 @@ strategi <- st_read("data/strategi/urban_region.shp")
 
 # Global Rural-Urban Mapping Project (GRUMP) from NASA, contains polygons from every urban settlement in the world
 
-grump <- st_read("data/grump/global_urban_extent_polygons_v1.01.shp") # For some reason it does not work
-qtm(grump)
+# grump <- st_read("data/grump/global_urban_extent_polygons_v1.01.shp") # For some reason it does not work
+# qtm(grump)
 
 # ################################################################# #
 #### PREP INPUT DATA                                             ####
@@ -109,6 +109,7 @@ points <- points[len >= 2,] #Only keep points that intersec at least 2 lines i.e
 points <- points[!duplicated(points$geometry),]
 rm(len, rowsum, inter)
 
+
 qtm(osm, lines.col = "highway", lines.lwd = 3)
 
 # ################################################################# #
@@ -124,10 +125,41 @@ traffic <- traffic[bounds,] #SUBSET??
 
 ### Subset major and minor roads
 osm <- osm[bounds,]
-osm_major <- osm[osm$highway %in% c("primary","secondary","motorway","trunk"),]
-osm_minor <- osm[!osm$highway %in% c("primary","secondary","motorway","trunk"),]
+osm_major <- osm[osm$highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),]
+osm_minor <- osm[!osm$highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),]
 
 ### Primary Roads sometimes are missing refs, lets fix that
 #qtm(osm_major, lines.col = "ref", lines.lwd = 3)
 #qtm(osm_minor, lines.col = "ref", lines.lwd = 3)
 
+# ################################################################# #
+#### GET AADT COUNTS                                             ####
+# ################################################################# #
+
+
+# Use RANN to get the 20 nearest roads to each road
+# If the reference is missining and the nearest road has the same highway type
+# copy the reference. Else type next nearest road
+# Repeate the whole process twice to allow propogation along roads
+osm_major_cents <- st_coordinates(st_centroid(osm_major))
+
+nn = RANN::nn2(osm_major_cents, k = 20) ### TRY TO FIX THIS LOOP ###
+
+for(k in 1:2){
+  for(i in 1:nrow(osm_major)){
+    if(is.na(osm_major$ref[i])){
+      for(j in 2:20){
+        idx <- nn$nn.idx[i,j]
+        if(osm_major$highway[idx] == osm_major$highway[i]){
+          if(!is.na(osm_major$ref[idx])){
+            osm_major$ref[i] <- osm_major$ref[idx]
+            break
+          }
+        }
+      }
+    }
+  }
+}
+
+qtm(osm_major, lines.col = "ref", lines.lwd = 3)
+rm(nn,osm_major_cents)

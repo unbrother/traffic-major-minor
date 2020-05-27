@@ -51,7 +51,7 @@ get.aadt.class <- function(e){
 ### Separate Calssified and Unclassified Roads
 traffic.class <- traffic[!substr(traffic$road,1,1) %in% c("U","C"),]
 traffic.unclass <- traffic[substr(traffic$road,1,1) %in% c("U","C"),]
-rm(traffic)
+
 
 ### Start with the classified
 roadnames <- unique(traffic.class$road)
@@ -72,46 +72,83 @@ res.class$aadt <- as.numeric(res.class$aadt)
 osm <- left_join(osm,res.class, by = c("osm_id" = "osm_id"))
 rm(res.class)
 
+
+qtm(points_mp)
 # ################################################################# #
 #### Assign Road Type Variable (major and minor)                 ####
 # ################################################################# #
+# Based on the Morley SQL algorithm
 
 # CLassify road type
-osm1 <- osm %>%
-  mutate(roadtype = ifelse(highway %in% c("primary","secondary","motorway","trunk"), "major", "minor"))
+osm_class <- osm %>%
+  mutate(roadtype = ifelse(highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),
+                           "major", "minor"))
 
 # ################################################################# #
 #### Assign Road importance with dodgr                           ####
 # ################################################################# #
 
 # CLassify by road importance
-start.time <- Sys.time()
+# start.time <- Sys.time()
 
-osm_graph <- weight_streetnet(osm1, wt_profile = "motorcar", type_col = "highway",
+osm_graph <- weight_streetnet(osm_class, wt_profile = "motorcar", type_col = "highway",
                               id_col = "osm_id")
+#
+# I believe this goes into the assignment part
+
+# rnet_contracted = dodgr_contract_graph(osm_graph)
+#
+# v <- dodgr_vertices (rnet_contracted) # 500 vertices
+# fmat <- array (1, dim = rep (nrow (v), 2))
+# rnet_f <- dodgr_flows_aggregate (rnet_contracted, from = v$id, to = v$id,
+#                                  flows = fmat)
+# rnet_directed <- merge_directed_graph(rnet_f)
+# rnet_f = dodgr_to_sf(rnet_directed)
+# summary(rnet_f$flow)
+#
+#
+#
+# traffic_data_buffer = stplanr::geo_projected(traffic.class, st_buffer, dist = 200)
+# traffic_estimates = aggregate(rnet_f["flow"], traffic_data_buffer, max)
+#
+# #> although coordinates are longitude/latitude, st_intersects assumes that they are planar
+# traffic_data_sf$pcu_estimated = traffic_estimates$flow
+# tm_shape(rnet_f) +
+#   tm_lines(lwd = "flow", scale = 9) +
+#   tm_shape(traffic_data_sf) +
+#   tm_dots(size = "pcu", alpha = 0.2) +
+#   tm_shape(traffic_data_sf) +
+#   tm_dots(size = "pcu_estimated", col = "blue") +
+#   tm_scale_bar()
+#
+
 
 osm_weighted <- osm_graph %>%
   group_by(way_id) %>%
   summarize(road_importance = sum(time_weighted))
 
 
-osm2 <- left_join(osm1, osm_weighted, by = c("osm_id" = "way_id"))
+osm_imp <- left_join(osm1, osm_weighted, by = c("osm_id" = "way_id"))
 
-osm2 <- osm2 %>%
+osm_imp <- osm_imp %>%
   mutate(road_importance = cut(road_importance,breaks = quantile(road_importance, probs = seq(0, 1, 0.2)),
                                labels=c("1","2","3","4","5")))
 
 
-osm2$road_importance <- unfactor(osm2$road_importance)
+#osm2$road_importance <- unfactor(osm2$road_importance)
 
-osm2$road_importance <- as.numeric(factor(osm2$road_importance))
+#osm2$road_importance <- as.numeric(factor(osm2$road_importance))
 
-end.time <- Sys.time()
-time.taken <- end.time - start.time
-time.taken
+class(osm2$road_importance)
+
+summary(osm2$road_importance)
+
+#end.time <- Sys.time()
+#time.taken <- end.time - start.time
+#time.taken
 
 
-osm2 %>% group_by(roadtype) %>%
+osm_imp %>% filter(!is.na(road_importance)) %>% group_by(roadtype) %>%
   summarize(mean = mean(road_importance))
 
 #osm_graph <- osm_graph[,c("from_id", "to_id", "time")]
@@ -144,11 +181,22 @@ osm2 %>% group_by(roadtype) %>%
 
 # Classify as urban or rural
 
-osm_urban <- st_join(osm2, strategi)
+osm_urban <- st_join(osm_imp, strategi)
 osm_urban <- osm_urban %>%
-  mutate(urban = ifelse(LEGEND %in% c("Large Urban Area polygon"), 1, 0))
+  mutate(urban = ifelse(LEGEND %in% c("Large Urban Area polygon"), "urban", "rural"))
 
+qtm(osm_urban, lines.col = "roadtype", lines.lwd = 1, style = "col_blind")
+qtm(osm_urban, lines.col = "urban", lines.lwd = 1, style = "col_blind")
 # qtm(osm_urban)
+
+
+osm_filtered <- osm_urban[,c("osm_id","name","ref","highway","aadt","roadtype","road_importance","urban")]
+
+osm_filtered <- st_set_geometry(osm_filtered, NULL)
+osm_filtered <- osm_filtered %>% filter(!is.na(aadt))
+
+write.csv(osm_filtered, "data/osmurban.csv", row.names = FALSE)
+
 
 
 rm(osm, osm1, osm2, osm_graph, osm_weighted, strategi, grump)
@@ -157,8 +205,29 @@ rm(osm, osm1, osm2, osm_graph, osm_weighted, strategi, grump)
 #### Assign AADT from nearest major road                         ####
 # ################################################################# #
 
+# filter points inside bounds
+
+points_major <- st_line_sample(osm_major, 1, density = 0.5, type = "regular", sample = NULL)
+
+qtm(points_major)
+
+#points_mp <- sf::st_intersection(points, bounds)
+#qtm(points_mp)
 
 
+points_major <- sf::st_combine(points_major)
+voronoi <- try(sf::st_voronoi(points_major, envelope = bounds$geometry), silent = TRUE)
+#if("try-error" %in% class(voronoi)){
+#  ennv <- sf::st_buffer(bounds, 2000)
+#  voronoi <- sf::st_voronoi(points_mp, envelope = ennv$geometry)
+#}
+voronoi <- sf::st_collection_extract(voronoi)
+sf::st_crs(voronoi) <- 27700
+voronoi <- sf::st_as_sf(data.frame(id = 1:length(voronoi), geometry = voronoi))
+voronoi <- sf::st_join(voronoi, points)
+
+qtm(voronoi) +
+qtm(osm_urban, lines.col = "aadt", lines.lwd = 1)
 # ################################################################# #
 #### Apply Generalised Linear Model                              ####
 # ################################################################# #
