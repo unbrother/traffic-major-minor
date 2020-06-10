@@ -132,34 +132,4 @@ osm_minor <- osm[!osm$highway %in% c("motorway","motowray_link","primary","prima
 #qtm(osm_major, lines.col = "ref", lines.lwd = 3)
 #qtm(osm_minor, lines.col = "ref", lines.lwd = 3)
 
-# ################################################################# #
-#### GET AADT COUNTS                                             ####
-# ################################################################# #
 
-
-# Use RANN to get the 20 nearest roads to each road
-# If the reference is missining and the nearest road has the same highway type
-# copy the reference. Else type next nearest road
-# Repeate the whole process twice to allow propogation along roads
-osm_major_cents <- st_coordinates(st_centroid(osm_major))
-
-nn = RANN::nn2(osm_major_cents, k = 20) ### TRY TO FIX THIS LOOP ###
-
-for(k in 1:2){
-  for(i in 1:nrow(osm_major)){
-    if(is.na(osm_major$ref[i])){
-      for(j in 2:20){
-        idx <- nn$nn.idx[i,j]
-        if(osm_major$highway[idx] == osm_major$highway[i]){
-          if(!is.na(osm_major$ref[idx])){
-            osm_major$ref[i] <- osm_major$ref[idx]
-            break
-          }
-        }
-      }
-    }
-  }
-}
-
-qtm(osm_major, lines.col = "ref", lines.lwd = 3)
-rm(nn,osm_major_cents)

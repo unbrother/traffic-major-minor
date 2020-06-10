@@ -13,9 +13,38 @@ library(dodgr)
 library(stplanr)
 library(sandwich)
 
+
 # ################################################################# #
 #### Add AADT to roads                                           ####
 # ################################################################# #
+
+
+# Use RANN to get the 20 nearest roads to each road
+# If the reference is missining and the nearest road has the same highway type
+# copy the reference. Else type next nearest road
+# Repeate the whole process twice to allow propogation along roads
+osm_major_cents <- st_coordinates(st_centroid(osm_major))
+
+nn = RANN::nn2(osm_major_cents, k = 20) ### TRY TO FIX THIS LOOP ###
+
+for(k in 1:2){
+  for(i in 1:nrow(osm_major)){
+    if(is.na(osm_major$ref[i])){
+      for(j in 2:20){
+        idx <- nn$nn.idx[i,j]
+        if(osm_major$highway[idx] == osm_major$highway[i]){
+          if(!is.na(osm_major$ref[idx])){
+            osm_major$ref[i] <- osm_major$ref[idx]
+            break
+          }
+        }
+      }
+    }
+  }
+}
+
+qtm(osm_major, lines.col = "ref", lines.lwd = 3)
+#rm(nn,osm_major_cents)
 
 get.aadt.class <- function(e){
   #message(paste0("doing ",e))
@@ -123,25 +152,19 @@ osm_graph <- weight_streetnet(osm_class, wt_profile = "motorcar", type_col = "hi
 #
 
 
-osm_weighted <- osm_graph %>%
+osm_graph <- osm_graph %>%
   group_by(way_id) %>%
   summarize(road_importance = sum(time_weighted))
 
-
-osm_imp <- left_join(osm1, osm_weighted, by = c("osm_id" = "way_id"))
-
-osm_imp <- osm_imp %>%
+osm_graph <- osm_graph %>%
   mutate(road_importance = cut(road_importance,breaks = quantile(road_importance, probs = seq(0, 1, 0.2)),
                                labels=c("1","2","3","4","5")))
 
+osm_imp <- left_join(osm_class, osm_graph, by = c("osm_id" = "way_id"))
 
-#osm2$road_importance <- unfactor(osm2$road_importance)
-
-#osm2$road_importance <- as.numeric(factor(osm2$road_importance))
-
-class(osm2$road_importance)
-
-summary(osm2$road_importance)
+#class(osm_imp$road_importance)
+#
+#summary(osm_imp$road_importance)
 
 #end.time <- Sys.time()
 #time.taken <- end.time - start.time
@@ -189,6 +212,7 @@ qtm(osm_urban, lines.col = "roadtype", lines.lwd = 1, style = "col_blind")
 qtm(osm_urban, lines.col = "urban", lines.lwd = 1, style = "col_blind")
 # qtm(osm_urban)
 
+#Check only roads with AADT data
 
 osm_filtered <- osm_urban[,c("osm_id","name","ref","highway","aadt","roadtype","road_importance","urban")]
 
@@ -199,35 +223,40 @@ write.csv(osm_filtered, "data/osmurban.csv", row.names = FALSE)
 
 
 
-rm(osm, osm1, osm2, osm_graph, osm_weighted, strategi, grump)
+#rm(osm, osm1, osm2, osm_graph, osm_weighted, strategi, grump)
 
 # ################################################################# #
 #### Assign AADT from nearest major road                         ####
 # ################################################################# #
 
-# filter points inside bounds
+osm_cents <- st_coordinates(st_centroid(osm_urban))
 
-points_major <- st_line_sample(osm_major, 1, density = 0.5, type = "regular", sample = NULL)
+nn_aadt = RANN::nn2(osm_cents, k = 20) ### TRY TO FIX THIS LOOP ###
 
-qtm(points_major)
+osm_urban$aadt_major = osm_urban$aadt
 
-#points_mp <- sf::st_intersection(points, bounds)
-#qtm(points_mp)
+## Needs to run three times
+
+for(k in 1:2){
+  for(i in 1:nrow(osm_urban)){
+    if(is.na(osm_urban$aadt[i])){
+      for(j in 2:20){
+        idx <- nn_aadt$nn.idx[i,j]
+        if(osm_urban$roadtype[idx] == osm_urban$roadtype[i]){
+          if(!is.na(osm_urban$aadt[idx])){
+            osm_urban$aadt[i] <- osm_urban$aadt[idx]
+            break
+          }
+        }
+      }
+    }
+  }
+}
 
 
-points_major <- sf::st_combine(points_major)
-voronoi <- try(sf::st_voronoi(points_major, envelope = bounds$geometry), silent = TRUE)
-#if("try-error" %in% class(voronoi)){
-#  ennv <- sf::st_buffer(bounds, 2000)
-#  voronoi <- sf::st_voronoi(points_mp, envelope = ennv$geometry)
-#}
-voronoi <- sf::st_collection_extract(voronoi)
-sf::st_crs(voronoi) <- 27700
-voronoi <- sf::st_as_sf(data.frame(id = 1:length(voronoi), geometry = voronoi))
-voronoi <- sf::st_join(voronoi, points)
 
-qtm(voronoi) +
-qtm(osm_urban, lines.col = "aadt", lines.lwd = 1)
+qtm(osm_urban, lines.col = "aadt", lines.lwd = 3)
+
 # ################################################################# #
 #### Apply Generalised Linear Model                              ####
 # ################################################################# #
@@ -245,6 +274,8 @@ osm_model <- osm_urban %>% filter(!is.na(aadt))
 class(osm_model$road_importance)
 
 osm_model$road_importance <- as.numeric(factor(osm_model$road_importance))
+
+
 
 summary(fit <- glm(urban ~ roadtype + log(road_importance) + log(aadt), family="poisson", data = osm_model))
 
