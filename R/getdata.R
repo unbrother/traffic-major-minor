@@ -11,13 +11,6 @@ library(sf)
 library(tmap)
 library(osmdata)
 library(dplyr)
-#library(deldir)
-#library(dodgr)
-#library(geodist)
-#library(dismo)
-#library(RANN)
-#library(pbapply)
-#library(stplanr)
 
 tmap_mode("view")
 
@@ -42,11 +35,6 @@ osm_raw = readRDS("data/osm_raw.Rds")
 # Import Strategi shp
 
 strategi <- st_read("data/strategi/urban_region.shp")
-
-# Global Rural-Urban Mapping Project (GRUMP) from NASA, contains polygons from every urban settlement in the world
-
-# grump <- st_read("data/grump/global_urban_extent_polygons_v1.01.shp") # For some reason it does not work
-# qtm(grump)
 
 # ################################################################# #
 #### PREP INPUT DATA                                             ####
@@ -109,9 +97,6 @@ points <- points[len >= 2,] #Only keep points that intersec at least 2 lines i.e
 points <- points[!duplicated(points$geometry),]
 rm(len, rowsum, inter)
 
-
-qtm(osm, lines.col = "highway", lines.lwd = 3)
-
 # ################################################################# #
 #### GET AADT COUNTS                                             ####
 # ################################################################# #
@@ -128,8 +113,6 @@ osm <- osm[bounds,]
 osm_major <- osm[osm$highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),]
 osm_minor <- osm[!osm$highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),]
 
-### Primary Roads sometimes are missing refs, lets fix that
-#qtm(osm_major, lines.col = "ref", lines.lwd = 3)
-#qtm(osm_minor, lines.col = "ref", lines.lwd = 3)
+
 
 
