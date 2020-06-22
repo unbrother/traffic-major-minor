@@ -7,6 +7,7 @@
 library(sf)
 library(dodgr)
 library(tmap)
+library(dplyr)
 tmap_mode("view")
 
 
@@ -113,7 +114,8 @@ od_to_odmatrix <- function(flow, attrib = 3, name_orig = 1, name_dest = 2) {
 }
 
 flow = od_to_odmatrix(data.frame(from = from, to = to, flow = 1))
-
+# flow2 = flow
+# flow2[is.na(flow2)] <- 0
 # dodgr_flows_aggregate  now seems to work on Windows
 agg_flow <- dodgr_flows_aggregate(graph,
                                   from = row.names(flow),
