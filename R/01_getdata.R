@@ -105,8 +105,8 @@ traffic <- traffic[bounds,] #SUBSET??
 
 ### Subset major and minor roads
 osm <- osm[bounds,]
-osm_major <- osm[osm$highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),]
-osm_minor <- osm[!osm$highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),]
+osm_major <- osm[osm$highway %in% c("motorway","motorway_link","primary","primary_link","trunk","trunk_link"),]
+osm_minor <- osm[!osm$highway %in% c("motorway","motorway_link","primary","primary_link","trunk","trunk_link"),]
 
 
 osm_major_cents <- st_coordinates(st_centroid(osm_major))
@@ -132,6 +132,7 @@ for(k in 1:2){
 qtm(osm_major, lines.col = "ref", lines.lwd = 3)
 #rm(nn,osm_major_cents)
 
+osm <- rbind(osm_major, osm_minor)
 
 # Assign Traffic Counts to the roads --------------------------------------
 
@@ -144,23 +145,29 @@ get.aadt.class <- function(e){
   ### need at least 2 points to make voronoi polygons
   if(nrow(traffic.sub) > 1){
     ### Make voronoi polygons and convert to SF
-    voronoi <- dismo::voronoi(xy = st_coordinates(traffic.sub))
-    voronoi <- as(voronoi, "sf")
-    st_crs(voronoi) <- st_crs(traffic.sub)
+    # voronoi <- dismo::voronoi(xy = st_coordinates(traffic.sub),
+    #                           ext = st_bbox(osm.sub))
+    # voronoi <- as(voronoi, "sf")
+    # st_crs(voronoi) <- st_crs(traffic.sub)
+    voronoi <- st_voronoi(st_combine(traffic.sub))
+    voronoi <- st_collection_extract(voronoi)
+    voronoi <- st_as_sf(voronoi)
+
   }else{
     ### Make a big buffer around the point
     voronoi <- st_buffer(traffic.sub, 500)
   }
 
+  voronoi <- st_join(voronoi, traffic.sub)
+
   ### Find Intersections of roads with vernoi polygons
   inter <- st_intersects(osm.sub,voronoi)
   ### Get aadt and ncycle values
   osm.sub$aadt <- lapply(1:nrow(osm.sub),function(x){as.numeric(round(mean(traffic.sub$aadt[inter[[x]]])),0)})
-  osm.sub$ncycles <- lapply(1:nrow(osm.sub),function(x){as.numeric(round(mean(traffic.sub$ncycles[inter[[x]]])),0)})
 
   ### Remove Unneeded Data
   osm.sub <- as.data.frame(osm.sub)
-  osm.sub <- osm.sub[,c("osm_id","aadt","ncycles")]
+  osm.sub <- osm.sub[,c("osm_id","aadt")]
 
   return(osm.sub)
 }
@@ -190,7 +197,8 @@ res.class$aadt <- as.numeric(res.class$aadt)
 osm <- left_join(osm,res.class, by = c("osm_id" = "osm_id"))
 rm(res.class)
 
-
+qtm(osm[osm$highway %in% c("motorway","motorway_link","primary","primary_link","trunk","trunk_link"),]
+    , lines.lwd = 3, lines.col = "aadt")
 
 
 
