@@ -49,9 +49,11 @@ graph_ids <- unique(graph_ids)
 junc_majmi <- left_join(as.data.frame(st_coordinates(junc_majmi)), graph_ids, by = c("X" = "from_lon", "Y" = "from_lat"))
 minor_cent <- left_join(minor_cent, graph_ids, by = c("X" = "from_lon", "Y" = "from_lat"))
 
-dists <- dodgr_dists(graph,
+#swtich to fastest rather than shortest
+dists <- dodgr_times(graph,
                      from = junc_majmi$from_id,
-                     to = minor_cent$from_id)
+                     to = minor_cent$from_id,
+                     shortest = FALSE)
 
 nearst_junction <- list()
 for(i in 1:ncol(dists)){
@@ -127,6 +129,9 @@ junc_majmi <- st_join(junc_majmi, osm_major[,"aadt"])
 
 osm_minor$aadt2 <- junc_majmi$aadt[match(osm_minor$nearst_junction ,junc_majmi$from_id)]
 
-qtm(osm_minor, lines.lwd = 3, lines.col = "aadt2") # Plot AADT of nearest major road assigned to minor road
 
-osm_minor$aadt3 <- osm_minor$aadt2 * osm_minor$
+osm_minor$aadt3 <- osm_minor$aadt2 * (osm_minor$dat.flow / max(osm_minor$dat.flow, na.rm = TRUE))
+
+tm_shape(osm_minor) +
+tm_lines(lwd = 3, col = "aadt3",
+    breaks = c(0,100,500,1000,2000,30000)) # Plot AADT of minor roads
