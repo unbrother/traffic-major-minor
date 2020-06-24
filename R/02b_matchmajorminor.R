@@ -124,7 +124,7 @@ od_to_odmatrix <- function(flow, attrib = 3, name_orig = 1, name_dest = 2) {
 }
 
 graphs <- list()
-for(i in zones$id){
+for(i in 1:3){
   message(paste0("Doing Zone ",i))
   zone_sub <- st_buffer(zones[zones$id == i, ], 0.0001)
   osm_sub <- osm_minor[zone_sub, , op = st_within]
@@ -169,7 +169,8 @@ geoms <- dodgr_to_sfc (graphs)
 gsf <- sf::st_sf (geoms)
 qtm(gsf, lines.col = "dat.flow", lines.lwd = 3) # Relative flows number
 
-
+# foo <- stplanr::overline2(gsf, attrib = "dat.flow",ncores = 4)
+# qtm(foo, lines.col = "dat.flow")
 
 # Match Up osm_minor_mod with gsf -----------------------------------------
 summary(unique(gsf$dat.way_id) %in% unique(osm_minor$osm_id))

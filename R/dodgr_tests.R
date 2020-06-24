@@ -2,9 +2,8 @@ library(dodgr)
 set.seed(123)
 graph <- weight_streetnet (hampi)
 
-from <- sample (graph$from_id, size = 10)
-to <- sample (graph$to_id, size = 5)
-to <- to [!to %in% from]
+from <- graph$from_id[1:10]
+to <- graph$to_id[30:34]
 flows <- matrix(rep(1, length(from) * length(to)),
                  nrow = length(from))
 
