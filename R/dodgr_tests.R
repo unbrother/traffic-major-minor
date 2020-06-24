@@ -1,12 +1,14 @@
 library(dodgr)
+set.seed(123)
 graph <- weight_streetnet (hampi)
+
 from <- sample (graph$from_id, size = 10)
 to <- sample (graph$to_id, size = 5)
 to <- to [!to %in% from]
 flows <- matrix(rep(1, length(from) * length(to)),
                  nrow = length(from))
 
-graph1 <- dodgr_flows_aggregate(graph, from = from, to = to, flows = flows, heap = "FHeap", norm_sums = FALSE)
+graph1 <- dodgr_flows_aggregate(graph, from = from, to = to, flows = flows, heap = "FHeap")
 graph2 <- dodgr_flows_aggregate(graph, from = from, to = to, flows = flows, heap = "BHeap")
 graph3 <- dodgr_flows_aggregate(graph, from = from, to = to, flows = flows, heap = "TriHeap")
 #crashes graph4 <- dodgr_flows_aggregate(graph, from = from, to = to, flows = flows, heap = "TriHeapExt")
