@@ -137,29 +137,7 @@ for(i in zones$id){
   if(nrow(osm_sub) > 0){
     graph_sub <- weight_streetnet(osm_sub, wt_profile = "motorcar")
     graph_sub <- dodgr_central(graph_sub)
-    # foo = dodgr_centrality(graph_sub)
-    #
-    # pts = graph_sub[,c("from_id","component")]
-    # pts = unique(pts)
-    # cents_sub = left_join(cents_sub, pts, "from_id")
-    # cents_sub = st_drop_geometry(cents_sub)
-    # cents_sub = cents_sub[,c("from_id","component")]
-    # flow = cents_sub[rep(1:nrow(cents_sub), times = nrow(cents_sub)),]
-    # flow = cbind(flow, cents_sub[rep(1:nrow(cents_sub), each = nrow(cents_sub)),])
-    # names(flow) = c("from_id","component1","to_id","component2")
-    # flow$flow <- ifelse(flow$component1 == flow$component2, 1, NA)
-    # flow <- flow[,c("from_id","to_id","flow")]
-    #
-    # # Simiply the matrix as dodgr_flows_aggregate doesn't support pairwise
-    # flow = od_to_odmatrix(flow)
-    # graph_sub <- dodgr_flows_aggregate(graph_sub,
-    #                                   from = pts$from_id,
-    #                                   to = pts$from_id,
-    #                                   flows = flow,
-    #                                   contract = TRUE, quiet = TRUE, tol = 0,
-    #                                   norm_sums = FALSE)
-    # class(graph_sub) <- "data.frame"
-    graphs[[i]] <- graph_sub
+        graphs[[i]] <- graph_sub
   }
 
 
@@ -168,11 +146,9 @@ for(i in zones$id){
 graphs <- bind_rows(graphs)
 
 summary(graphs$centrality)
-#graph_undir <- merge_directed_graph(graphs)
-#geoms <- dodgr_to_sfc (graphs)
-# graph_cont <- dodgr_contract_graph (graph_undir)
-#gsf <- sf::st_sf (geoms)
-qtm(graphs, lines.col = "centrality", lines.lwd = 3) # Relative flows number
+tm_shape(graphs) +
+  tm_lines(col = "centrality", lwd = 3, style = "jenks")
+
 
 
 
