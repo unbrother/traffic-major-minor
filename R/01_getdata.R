@@ -2,8 +2,6 @@
 # Aim this script get the OSM data for an area, cleans it and assigns
 # AADT values where available
 
-
-
 # ################################################################# #
 #### LOAD LIBRARIES AND DEFINE CORE SETTINGS                     ####
 # ################################################################# #
