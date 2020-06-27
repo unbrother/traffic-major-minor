@@ -32,6 +32,12 @@ both_int = ifelse(minor_int > 0 & major_int > 0, TRUE, FALSE)
 
 junc_majmi = points[both_int,]
 
+# Match Major Road AADT onto junctions
+junc_majmi <- st_join(junc_majmi, osm_major[,"aadt"])
+junc_majmi <- junc_majmi[!duplicated(junc_majmi$geom),]
+qtm(junc_majmi, dots.col = "aadt")
+
+
 # Convert to 4326 for dodgr
 osm_minor <- st_transform(osm_minor, 4326)
 junc_majmi <- st_transform(junc_majmi, 4326)
@@ -47,10 +53,11 @@ graph <- weight_streetnet(osm_minor, wt_profile = "motorcar")
 graph_ids <- graph[,c("from_id","from_lon","from_lat")]
 graph_ids <- unique(graph_ids)
 
-junc_majmi <- left_join(as.data.frame(st_coordinates(junc_majmi)), graph_ids, by = c("X" = "from_lon", "Y" = "from_lat"))
+junc_majmi <- cbind(junc_majmi, st_coordinates(junc_majmi))
+junc_majmi <- left_join(junc_majmi, graph_ids, by = c("X" = "from_lon", "Y" = "from_lat"))
 minor_cent <- left_join(minor_cent, graph_ids, by = c("X" = "from_lon", "Y" = "from_lat"))
 
-#swtich to fastest rather than shortest
+# For each minor road centroid, fin the nearest (in time) junction  --------
 dists <- dodgr_times(graph,
                      from = junc_majmi$from_id,
                      to = minor_cent$from_id,
@@ -77,7 +84,13 @@ for(i in 1:ncol(dists)){
 nearst_junction <- unlist(nearst_junction)
 
 osm_minor$nearst_junction <- nearst_junction
-qtm(osm_minor, lines.col = "nearst_junction", lines.lwd = 3) # plot each road colored by it nearest junction
+osm_minor$major_aadt <- junc_majmi$aadt[match(osm_minor$nearst_junction, junc_majmi$from_id)]
+# plot each road colored by the AADT on the nearest (in time) major road
+qtm(osm_minor, lines.col = "major_aadt", lines.lwd = 3)
+
+
+
+# Split the minor roads into zones divided by the major road network --------
 
 # Make subgraphs
 road_cut <- st_cast(osm_major$geom, "LINESTRING")
@@ -90,9 +103,6 @@ minor_hull <- concaveman::concaveman(st_as_sf(all_points), concavity = 2)
 minor_hull <- st_make_valid(minor_hull)
 minor_hull <- st_collection_extract(minor_hull)
 
-# qtm(minor_hull) +
-#   qtm(osm_major)
-
 zones <- lwgeom::st_split(minor_hull, road_cut)
 zones <- st_collection_extract(zones)
 zones <- st_as_sf(zones)
@@ -101,30 +111,21 @@ zones$npoints <- lengths(zones_inter)
 zones <- zones[zones$npoints > 5, ]
 zones$id <- 1:nrow(zones)
 zones <- st_transform(zones, 4326)
-qtm(zones, fill = "id")
 
-graphs <- list()
+# plot the zones created
+qtm(zones, fill = "id")
 
 minor_cent <- st_as_sf(minor_cent, coords = c("X","Y"), crs = 4326, remove = FALSE)
 
-# Free up memmory
+# Free up memory
 rm(road_cut, points, zones_inter, both_int,minor_int, minor_hull,
-   minor_points, all_points, dists, traffic, graph, graph_ids, nearst_junction)
+   minor_points, all_points, dists, graph, graph_ids, nearst_junction,
+   major_int, mindist, sub)
 gc()
-stop()
 
-od_to_odmatrix <- function(flow, attrib = 3, name_orig = 1, name_dest = 2) {
-  out <- matrix(
-    nrow = length(unique(flow[[name_orig]])),
-    ncol = length(unique(flow[[name_dest]])),
-    dimnames = list(unique(flow[[name_orig]]), unique(flow[[name_dest]]))
-  )
-  out[cbind(flow[[name_orig]], flow[[name_dest]])] <- flow[[attrib]]
-  out
-}
 
+# Loop over each zone and find the centrality of the minor road ne --------
 graphs <- list()
-source("R/dodgr_central.R")
 
 for(i in zones$id){
   message(paste0("Doing Zone ",i))
@@ -136,8 +137,12 @@ for(i in zones$id){
   #   qtm(cents_sub)
   if(nrow(osm_sub) > 0){
     graph_sub <- weight_streetnet(osm_sub, wt_profile = "motorcar")
-    graph_sub <- dodgr_central(graph_sub)
-        graphs[[i]] <- graph_sub
+    graph_sub <- dodgr_centrality(graph_sub)
+    graph_sub <- merge_directed_graph(graph_sub)
+    clear_dodgr_cache()
+    graph_sub <- dodgr_to_sf(graph_sub)
+    #graph_sub <- dodgr_central(graph_sub)
+    graphs[[i]] <- graph_sub
   }
 
 
@@ -145,30 +150,48 @@ for(i in zones$id){
 
 graphs <- bind_rows(graphs)
 
+# Plot the centrality of all minor roads
 summary(graphs$centrality)
 tm_shape(graphs) +
   tm_lines(col = "centrality", lwd = 3, style = "jenks")
 
 
+# Match Up centrality with major aadt -----------------------------------------
+summary(unique(graphs$way_id) %in% unique(osm_minor$osm_id))
+summary(duplicated(graphs$way_id)) # some osm_ids have been split
+
+graphs <- left_join(graphs,
+                       st_drop_geometry(osm_minor[,c("osm_id","major_aadt")]),
+                       by = c("way_id" = "osm_id"))
 
 
-# Match Up osm_minor_mod with gsf -----------------------------------------
-summary(unique(gsf$dat.way_id) %in% unique(osm_minor$osm_id))
 
-imp_score <- st_drop_geometry(gsf[,c("dat.way_id","dat.flow")])
-osm_minor <- left_join(osm_minor, imp_score, by = c("osm_id" = "dat.way_id"))
+# Graphs is a sf df of minor roads with a major_aadt and centrality --------
+head(graphs)
 
 
-# Find the AADT on the major road ofr each junction point -----------------
-junc_majmi <- st_as_sf(junc_majmi, coords = c("X","Y"), crs = 4326, remove = FALSE)
-osm_major <- st_transform(osm_major, 4326)
-junc_majmi <- st_join(junc_majmi, osm_major[,"aadt"])
+# Compare measured AADT and centrality ------------------------------------
+traffic_minor <- traffic[traffic$road %in% c("C","U"),]
+# Buffer as traffic points are away from roads
+traffic_minor <- st_buffer(traffic_minor, 33)
+traffic_minor <- st_transform(traffic_minor, 4326)
 
-osm_minor$aadt2 <- junc_majmi$aadt[match(osm_minor$nearst_junction ,junc_majmi$from_id)]
+traffic_minor <- st_join(traffic_minor, graphs)
+summary(is.na(traffic_minor$centrality))
 
+# some simple plots
+plot(traffic_minor$centrality, traffic_minor$aadt)
+plot(traffic_minor$major_aadt, traffic_minor$aadt)
 
-osm_minor$aadt3 <- osm_minor$aadt2 * (osm_minor$dat.flow / max(osm_minor$dat.flow, na.rm = TRUE))
+# simple model
+m1 <- lm(aadt ~ centrality + major_aadt, data = traffic_minor)
+summary(m1)
+plot(traffic_minor$aadt[!is.na(traffic_minor$centrality)], predict(m1))
+abline(0,1, col = "red")
 
-tm_shape(osm_minor) +
-tm_lines(lwd = 3, col = "aadt3",
-    breaks = c(0,100,500,1000,2000,30000)) # Plot AADT of minor roads
+# log model
+m2 <- lm(aadt ~ log(centrality) + log(major_aadt), data = traffic_minor)
+summary(m2)
+plot(traffic_minor$aadt[!is.na(traffic_minor$centrality)], predict(m2))
+abline(0,1, col = "red")
+
