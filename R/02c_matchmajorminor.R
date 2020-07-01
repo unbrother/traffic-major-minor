@@ -4,6 +4,7 @@
 
 # Load Packages -----------------------------------------------------------
 
+library(ggplot2)
 library(sf)
 library(dodgr)
 library(tmap)
@@ -183,11 +184,16 @@ summary(is.na(traffic_minor$centrality))
 plot(traffic_minor$centrality, traffic_minor$aadt)
 plot(traffic_minor$major_aadt, traffic_minor$aadt)
 
+traffic_minor %>% ggplot(aes(x = aadt, y = centrality)) +
+  geom_point(aes(shape = highway)) +
+  geom_smooth(method="lm", se=F, fullrange=FALSE, level=0.95)
+
 # simple model
 m1 <- lm(aadt ~ centrality + major_aadt, data = traffic_minor)
 summary(m1)
 plot(traffic_minor$aadt[!is.na(traffic_minor$centrality)], predict(m1))
 abline(0,1, col = "red")
+
 
 # log model
 m2 <- lm(aadt ~ log(centrality) + log(major_aadt), data = traffic_minor)
@@ -195,3 +201,33 @@ summary(m2)
 plot(traffic_minor$aadt[!is.na(traffic_minor$centrality)], predict(m2))
 abline(0,1, col = "red")
 
+# Assign area type (urban and rural) ---------------------------------------
+
+# Import Strategi shp
+
+strategi <- st_read("data/strategi/urban_region.shp") #Find if this can be obtained directly
+strategi <- st_transform(strategi, 4326)
+
+# Classify as urban or rural
+
+traffic_areatype <- st_join(traffic_minor, strategi, by = c("geom" = "geometry"))
+traffic_areatype <- traffic_areatype %>%
+  mutate(areatype = ifelse(LEGEND %in% c("Large Urban Area polygon"), "urban", "rural"))
+
+# log model with added variable
+m2a <- lm(log(aadt) ~ log(centrality) + log(major_aadt) + areatype, data = traffic_areatype)
+summary(m2a)
+plot(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)], exp(predict(m2a)))
+abline(0,1, col = "red")
+
+# log model poisson
+m3 <- glm(aadt ~ log(centrality) + log(major_aadt) + areatype, data = traffic_areatype, family = "poisson")
+summary(m3)
+plot(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)], exp(predict(m3)))
+abline(0,1, col = "red")
+
+rmse <- sum(sqrt((exp(predict(m2a))-traffic_minor$aadt)^2))/22
+
+data.frame(exp(predict(m2a)), traffic_minor$aadt)
+
+4.80/mean(traffic_minor$aadt)

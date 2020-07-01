@@ -1,23 +1,25 @@
 major_centrality <- weight_streetnet(osm, wt_profile = "motorcar")
 major_centrality <- dodgr_centrality(major_centrality)
+major_centrality <- merge_directed_graph(major_centrality)
+clear_dodgr_cache()
+major_centrality <- dodgr_to_sf(major_centrality)
 
-major_cent <- dodgr_to_sf(major_centrality)
-major_cent <- stplanr::overline2(major_cent, attrib = "centrality")
+summary(major_centrality$centrality)
+tm_shape(major_centrality) +
+  tm_lines(col = "centrality", lwd = 3)
 
-#g = major_centrality
-g <- dodgr_centrality(major_centrality)
-major_geom <- major_centrality[,c("from_lon","from_lat","to_lon","to_lat")]
-g <- major_centrality[,!names(major_centrality) %in% c("from_lon","from_lat","to_lon","to_lat","from_id","to_id")]
-major_geom <- as.matrix(major_geom)
-major_geom <- split(major_geom, 1:nrow(major_geom))
-major_geom <- lapply(major_geom, function(x){
-  sf::st_linestring(matrix(x, ncol = 2, byrow = TRUE))
-})
-major_geom <- sf::st_as_sfc(major_geom)
-g$geometry <- major_geom
-g <- st_as_sf(g, crs = 4326)
-g <- stplanr::overline2(g, attrib = "centrality")
+graphs_major <- left_join(major_centrality,
+                    st_drop_geometry(osm_major[,c("osm_id","aadt")]),
+                    by = c("way_id" = "osm_id"))
+graphs_major <- graphs_major[graphs_major$highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),]
+colnames(graphs_major)[which(names(graphs_major) == "aadt")] <- "major_aadt"
 
 
+traffic_major <- traffic[!traffic$road %in% c("C","U"),]
 
-osm_major <- left_join(osm_major, major_centrality, by = c("osm_id" = "way_id"))
+traffic_major <- st_buffer(traffic_major, 1000)
+traffic_major <- st_transform(traffic_major, 4326)
+
+traffic_major <- st_join(traffic_major, graphs_major)
+
+qtm(traffic_major, lines.col = "aadt", lines.lwd = 3)
