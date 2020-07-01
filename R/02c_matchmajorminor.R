@@ -199,6 +199,7 @@ abline(0,1, col = "red")
 m2 <- lm(aadt ~ log(centrality) + log(major_aadt), data = traffic_minor)
 summary(m2)
 plot(traffic_minor$aadt[!is.na(traffic_minor$centrality)], predict(m2))
+cor(traffic_minor$aadt[!is.na(traffic_minor$centrality)], predict(m2))
 abline(0,1, col = "red")
 
 # Assign area type (urban and rural) ---------------------------------------
@@ -219,11 +220,13 @@ m2a <- lm(log(aadt) ~ log(centrality) + log(major_aadt) + areatype, data = traff
 summary(m2a)
 plot(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)], exp(predict(m2a)))
 abline(0,1, col = "red")
+cor(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)], exp(predict(m2a)))
 
 # log model poisson
 m3 <- glm(aadt ~ log(centrality) + log(major_aadt) + areatype, data = traffic_areatype, family = "poisson")
 summary(m3)
 plot(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)], exp(predict(m3)))
+cor(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)], exp(predict(m3)))
 abline(0,1, col = "red")
 
 rmse <- sum(sqrt((exp(predict(m2a))-traffic_minor$aadt)^2))/22
