@@ -19,7 +19,7 @@ traffic = st_read("data/iow_traffic_points.gpkg")
 
 # Find Junctions between minor and major roads ----------------------------
 
-osm_major <- osm[osm$highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),]
+osm_major <- osm[osm$highway %in% c("data/grump/grump-v1-urban-ext-polygons-rev01-documentation.pdfrway","motowray_link","primary","primary_link","trunk","trunk_link"),]
 osm_minor <- osm[!osm$highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),]
 
 minor_int <- st_intersects(points, osm_minor)
@@ -121,7 +121,7 @@ agg_flow <- dodgr_flows_aggregate(graph,
                                   from = row.names(flow),
                                   to = colnames(flow),
                                   flows = flow,
-                                  contract = TRUE, quiet = FALSE, tol = 0)
+                                  contract = TRUE, quiet = FALSE, tol = 0, norm_sums = FALSE )
 summary(agg_flow$flow)
 graph_undir <- merge_directed_graph(agg_flow)
 geoms <- dodgr_to_sfc (graph_undir)
@@ -134,9 +134,16 @@ qtm(gsf, lines.col = "dat.flow", lines.lwd = 3) # Relative flows number
 # Match Up osm_minor_mod with gsf -----------------------------------------
 summary(unique(gsf$dat.way_id) %in% unique(osm_minor_mod$osm_id))
 
-imp_score <- st_drop_geometry(gsf[,"dat.way_id","dat.flow"])
-osm_minor_mod <- left_join(osm_minor_mod, imp_score, by = c("osm_id" = "dat.way_id"))
+#imp_score <- st_drop_geometry(gsf[,"dat.way_id","dat.flow"])
+#imp_score <- cbind(gsf$dat.way_id, as.numeric(gsf$dat.flow))
+#colnames(imp_score) <- c("dat.way_id", "score")
+#imp_score <- data.frame(imp_score)
+#osm_minor_mod <- left_join(osm_minor_mod, imp_score, by = c("osm_id" = "dat.way_id"))
+#osm_mod <- left_join(osm, imp_score, by = c("osm_id" = "dat.way_id"))
+#
+#str(osm_mod)
 
+qtm(osm_minor_mod, lines.col = "score", lines.lwd = 3) # Relative flows number
 
 # Find the AADT on the major road ofr each junction point -----------------
 

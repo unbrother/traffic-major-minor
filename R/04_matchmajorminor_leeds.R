@@ -4,27 +4,33 @@
 
 # Load Packages -----------------------------------------------------------
 
+### Clear memory
+rm(list = ls())
+
 library(ggplot2)
 library(sf)
 library(dodgr)
 library(tmap)
 library(dplyr)
 library(concaveman)
+library(tidyr)
 tmap_mode("view")
 
 
 # Load Data ---------------------------------------------------------------
 
-osm = st_read("data/iow_osm_all.gpkg")
-points = st_read("data/iow_points.gpkg")
-traffic = st_read("data/iow_traffic_points.gpkg")
+osm = st_read("data/leeds_osm_all.gpkg")
+points = st_read("data/leeds_points.gpkg")
+traffic = st_read("data/leeds_traffic_points.gpkg")
+
+osm <- st_transform(osm, 27700)
+points <- st_transform(points, 27700)
+traffic <- st_transform(traffic, 27700)
 
 # Find Junctions between minor and major roads ----------------------------
 
-osm_major <- osm[osm$highway %in% c("motorway","motowray_link","primary",
-                                    "primary_link","trunk","trunk_link"),]
-osm_minor <- osm[!osm$highway %in% c("motorway","motowray_link","primary",
-                                     "primary_link","trunk","trunk_link"),]
+osm_major <- osm[osm$highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),]
+osm_minor <- osm[!osm$highway %in% c("motorway","motowray_link","primary","primary_link","trunk","trunk_link"),]
 
 minor_int <- st_intersects(points, osm_minor)
 major_int <- st_intersects(points, osm_major)
@@ -58,10 +64,8 @@ graph_ids <- graph[,c("from_id","from_lon","from_lat")]
 graph_ids <- unique(graph_ids)
 
 junc_majmi <- cbind(junc_majmi, st_coordinates(junc_majmi))
-junc_majmi <- left_join(junc_majmi, graph_ids, by = c("X" = "from_lon",
-                                                      "Y" = "from_lat"))
-minor_cent <- left_join(minor_cent, graph_ids, by = c("X" = "from_lon",
-                                                      "Y" = "from_lat"))
+junc_majmi <- left_join(junc_majmi, graph_ids, by = c("X" = "from_lon", "Y" = "from_lat"))
+minor_cent <- left_join(minor_cent, graph_ids, by = c("X" = "from_lon", "Y" = "from_lat"))
 
 # For each minor road centroid, find the nearest (in time) junction  --------
 dists <- dodgr_times(graph,
@@ -90,8 +94,7 @@ for(i in 1:ncol(dists)){
 nearst_junction <- unlist(nearst_junction)
 
 osm_minor$nearst_junction <- nearst_junction
-osm_minor$major_aadt <- junc_majmi$aadt[match(osm_minor$nearst_junction,
-                                              junc_majmi$from_id)]
+osm_minor$major_aadt <- junc_majmi$aadt[match(osm_minor$nearst_junction, junc_majmi$from_id)]
 # plot each road colored by the AADT on the nearest (in time) major road
 qtm(osm_minor, lines.col = "major_aadt", lines.lwd = 3)
 
@@ -106,7 +109,7 @@ minor_points <- st_cast(osm_minor$geom, "POINT")
 minor_points <- st_transform(minor_points, 27700)
 all_points <- st_cast(osm$geom, "POINT")
 
-minor_hull <- concaveman::concaveman(st_as_sf(all_points), concavity = 2)
+minor_hull <- concaveman::concaveman(st_as_sf(all_points), concavity = 1)
 minor_hull <- st_make_valid(minor_hull)
 minor_hull <- st_collection_extract(minor_hull)
 
@@ -119,11 +122,11 @@ zones <- zones[zones$npoints > 5, ]
 zones$id <- 1:nrow(zones)
 zones <- st_transform(zones, 4326)
 
+
 # plot the zones created
 qtm(zones, fill = "id")
 
-minor_cent <- st_as_sf(minor_cent, coords = c("X","Y"), crs = 4326,
-                       remove = FALSE)
+minor_cent <- st_as_sf(minor_cent, coords = c("X","Y"), crs = 4326, remove = FALSE)
 
 # Free up memory
 rm(road_cut, points, zones_inter, both_int,minor_int, minor_hull,
@@ -171,8 +174,8 @@ summary(unique(graphs$way_id) %in% unique(osm_minor$osm_id))
 summary(duplicated(graphs$way_id)) # some osm_ids have been split
 
 graphs <- left_join(graphs,
-                       st_drop_geometry(osm_minor[,c("osm_id","major_aadt")]),
-                       by = c("way_id" = "osm_id"))
+                    st_drop_geometry(osm_minor[,c("osm_id","major_aadt")]),
+                    by = c("way_id" = "osm_id"))
 
 # Graphs is a sf df of minor roads with a major_aadt and centrality --------
 head(graphs)
@@ -207,83 +210,47 @@ traffic_minor %>% ggplot(aes(x = centrality, y = major_aadt)) +
 cor(traffic_minor$centrality, traffic_minor$aadt)
 cor(traffic_minor$major_aadt, traffic_minor$aadt)
 
-# simple model
-m1 <- lm(aadt ~ centrality + major_aadt, data = traffic_minor)
-summary(m1)
-plot(traffic_minor$aadt[!is.na(traffic_minor$aadt)], predict(m1),
-     main = "Model m1 observed vs predicted results",
-     ylab = "Predicted AADT",
-     xlab= "Observed AADT")
-abline(0,1, col = "red")
-
-
-# log model
-m2 <- lm(aadt ~ log(centrality) + log(major_aadt), data = traffic_minor)
-summary(m2)
-plot(traffic_minor$aadt[!is.na(traffic_minor$aadt)], predict(m2),
-     main = "Model m2 observed vs predicted results",
-     ylab = "Predicted AADT",
-     xlab= "Observed AADT")
-abline(0,1, col = "red")
-cor(traffic_minor$aadt[!is.na(traffic_minor$centrality)], predict(m2))
+traffic_minor <- traffic_minor %>% drop_na(major_aadt)
 
 # Assign area type (urban and rural) ---------------------------------------
 
 # Import Strategi shp
 
-strategi <- st_read("data/strategi/urban_region.shp")
+strategi <- st_read("data/strategi/urban_region.shp") #Find if this can be obtained directly
 strategi <- st_transform(strategi, 4326)
 
 # Classify as urban or rural
 
 traffic_areatype <- st_join(traffic_minor, strategi)
 traffic_areatype <- traffic_areatype %>%
-  mutate(areatype = ifelse(LEGEND %in% c("Large Urban Area polygon"), "urban",
-                           "rural"))
-
-# log model with added variable
-m2a <- lm(log(aadt) ~ log(centrality) + log(major_aadt) + areatype,
-          data = traffic_areatype)
-summary(m2a)
-plot(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)],
-     exp(predict(m2a)),
-     main = "Model m2a observed vs predicted results",
-     ylab = "Predicted AADT",
-     xlab= "Observed AADT")
-abline(0,1, col = "red")
-cor(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)],
-    exp(predict(m2a)))
-
-table(traffic_areatype$areatype)
+  mutate(areatype = ifelse(LEGEND %in% c("Large Urban Area polygon"), "urban", "rural"))
 
 # log model poisson
 hist(traffic_areatype$aadt, breaks = 20,
      main = "AADT distribution",
      xlab = "AADT")
 
-m3 <- glm(aadt ~ log(centrality) + log(major_aadt) + areatype,
-          data = traffic_areatype, family = "poisson")
-summary(m3)
-plot(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)],
-     exp(predict(m3)),
+mleeds <- glm(aadt ~ log(centrality) + log(major_aadt) + areatype, data = traffic_areatype, family = "poisson")
+summary(mleeds)
+plot(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)], exp(predict(m3)),
      main = "Model m3 observed vs predicted results",
      ylab = "Predicted AADT",
      xlab= "Observed AADT")
 abline(0,1, col = "red")
-cor(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)],
-    exp(predict(m3)))
-
-rmse3 <- sum(sqrt((exp(predict(m3))-traffic_minor$aadt)^2))/22
-
-data.frame(exp(predict(m3)), traffic_minor$aadt)
+cor(traffic_areatype$aadt[!is.na(traffic_areatype$centrality)], exp(predict(m3)))
 
 par(mfrow = c(1, 1))
-plot(density(resid(m3, type='pearson')))
-plot(density(rstandard(m3, type='pearson')))
+plot(density(resid(mleeds, type='pearson')))
+plot(density(rstandard(mleeds, type='pearson')))
 
-plot(density(resid(m3, type='deviance')))
+plot(density(resid(mleeds, type='deviance')))
 
-scatter.smooth(predict(m3, type='response'), rstandard(mleed, type='deviance'), col='gray')
+scatter.smooth(predict(mleeds, type='response'), rstandard(mleed, type='deviance'), col='gray')
 
 par(mfrow = c(2, 2))
-plot(m3)
+plot(mleeds)
+
+
+rmseleeds <- sum(sqrt((exp(predict(mleeds))-traffic_minor$aadt)^2))/22
+
+data.frame(exp(predict(mleeds)), traffic_minor$aadt)

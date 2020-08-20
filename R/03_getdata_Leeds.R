@@ -1,5 +1,5 @@
-# 01 Getdata
-# Aim this script get the OSM data for an area, cleans it and assigns
+# 03 Getdata
+# Aim this script get the OSM data for the Leeds area, cleans it and assigns
 # AADT values where available
 
 # ################################################################# #
@@ -24,7 +24,7 @@ tmap_mode("view")
 # ################################################################# #
 
 ### Get Roads
-q = opq(getbb("isle of wight, UK")) %>%
+q = opq(getbb("leeds, UK")) %>%
   add_osm_feature(key = "highway")
 
 osm_raw = osmdata_sf(q = q)
@@ -61,15 +61,11 @@ osm <- osm[osm$highway %in% c("living_street","primary","primary_link",
 osm <- rbind(osm, polys)
 rm(osm_raw, polys)
 qtm(osm)
-### Find Junctions, OSM Points are both nodes that make up lines/polygons, and
-### objects e.g. shops
+### Find Junctions, OSM Points are both nodes that make up lines/polygons, and objects e.g. shops
 ### remove points that are not nodes on the line
 ### node points have no tags
 
-# Get column names other than osm_id, and highway which is just for junction
-# types, and crossing info which can be junction between cycle way and road
-col.names <- names(points)[!names(points) %in% c("osm_id","highway", "crossing",
-                                                 "crossing_ref","geometry")]
+col.names <- names(points)[!names(points) %in% c("osm_id","highway", "crossing", "crossing_ref","geometry")] # Get column names other than osm_id, and highway which is just for junction types, and crossing info which can be junction between cycle way and road
 points.sub <- points
 points <- points[,c("osm_id","highway")]
 points.sub <- as.data.frame(points.sub)
@@ -82,15 +78,13 @@ rm(points.sub, col.names)
 points <- points[rowsum == 0,] #Remove points with any tags
 
 ### now check highway tag to remove things like traffic lights
-points <- points[is.na(points$highway) | points$highway %in%
-                   c("mini_roundabout","motorway_junction"), ]
+points <- points[is.na(points$highway) | points$highway %in% c("mini_roundabout","motorway_junction"), ]
 points <- points[,c("osm_id","geometry")]
 
 ### Look for points that intersect lines
 inter <- st_intersects(points,osm)
 len <- lengths(inter)
-points <- points[len >= 2,] # Only keep points that intersec at least 2 lines
-                            # i.e. a junction
+points <- points[len >= 2,] #Only keep points that intersec at least 2 lines i.e. a junction
 
 ### Remove any duplicated points
 points <- points[!duplicated(points$geometry),]
@@ -101,17 +95,20 @@ rm(len, rowsum, inter)
 # ################################################################# #
 
 ### Bounds and traffic
-bounds <- readRDS("data/bounds.Rds")
-traffic <- readRDS("data/traffic.Rds")
-traffic <- traffic[,c("road","aadt","ncycles")]
-traffic <- traffic[bounds,] #SUBSET??
+#bounds <- readRDS("data/bounds.Rds")
+traffic_leeds <- read.csv("data/traffic_leeds.csv")
+traffic_leeds <- st_as_sf(traffic_leeds, coords = c("easting", "northing"),  crs = 27700)
+traffic_leeds <- traffic_leeds[traffic_leeds$year == max(traffic_leeds$year),]
+traffic_leeds <- traffic_leeds[,c("road_name","all_motor_vehicles")]
+colnames(traffic_leeds) <- c("road", "aadt", "geometry")
+#traffic <- traffic[bounds,] #SUBSET??
+qtm(traffic_leeds)
+
 
 ### Subset major and minor roads
-osm <- osm[bounds,]
-osm_major <- osm[osm$highway %in% c("motorway","motorway_link","primary",
-                                    "primary_link","trunk","trunk_link"),]
-osm_minor <- osm[!osm$highway %in% c("motorway","motorway_link","primary",
-                                     "primary_link","trunk","trunk_link"),]
+#osm <- osm[bounds,]
+osm_major <- osm[osm$highway %in% c("motorway","motorway_link","primary","primary_link","trunk","trunk_link"),]
+osm_minor <- osm[!osm$highway %in% c("motorway","motorway_link","primary","primary_link","trunk","trunk_link"),]
 
 
 osm_major_cents <- st_coordinates(st_centroid(osm_major))
@@ -168,8 +165,7 @@ get.aadt.class <- function(e){
   ### Find Intersections of roads with vernoi polygons
   inter <- st_intersects(osm.sub,voronoi)
   ### Get aadt and ncycle values
-  osm.sub$aadt <- lapply(1:nrow(osm.sub),function(x)
-    {as.numeric(round(mean(traffic.sub$aadt[inter[[x]]])),0)})
+  osm.sub$aadt <- lapply(1:nrow(osm.sub),function(x){as.numeric(round(mean(traffic.sub$aadt[inter[[x]]])),0)})
 
   ### Remove Unneeded Data
   osm.sub <- as.data.frame(osm.sub)
@@ -180,8 +176,8 @@ get.aadt.class <- function(e){
 
 
 ### Separate Classified and Unclassified Roads
-traffic.class <- traffic[!substr(traffic$road,1,1) %in% c("U","C"),]
-traffic.unclass <- traffic[substr(traffic$road,1,1) %in% c("U","C"),]
+traffic.class <- traffic_leeds[!substr(traffic_leeds$road,1,1) %in% c("U","C"),]
+traffic.unclass <- traffic_leeds[substr(traffic_leeds$road,1,1) %in% c("U","C"),]
 
 
 ### Start with the classified
@@ -203,13 +199,11 @@ res.class$aadt <- as.numeric(res.class$aadt)
 osm <- left_join(osm,res.class, by = c("osm_id" = "osm_id"))
 rm(res.class)
 
-qtm(osm[osm$highway %in% c("motorway","motorway_link","primary","primary_link",
-                           "trunk","trunk_link"),]
+qtm(osm[osm$highway %in% c("motorway","motorway_link","primary","primary_link","trunk","trunk_link"),]
     , lines.lwd = 3, lines.col = "aadt")
-
 
 # Save these for later ----------------------------------------------------
 
-st_write(osm, "data/iow_osm_all.gpkg", delete_dsn = TRUE)
-st_write(points, "data/iow_points.gpkg", delete_dsn = TRUE)
-st_write(traffic, "data/iow_traffic_points.gpkg", delete_dsn = TRUE)
+st_write(osm, "data/leeds_osm_all.gpkg", delete_dsn = TRUE)
+st_write(points, "data/leeds_points.gpkg", delete_dsn = TRUE)
+st_write(traffic_leeds, "data/leeds_traffic_points.gpkg", delete_dsn = TRUE)

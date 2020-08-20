@@ -123,16 +123,16 @@ osm_graph <- weight_streetnet(osm_class, wt_profile = "motorcar", type_col = "hi
 #  mutate(road_importance = cut(road_importance,breaks = quantile(road_importance, probs = seq(0, 1, 0.2)),
 #                               labels=c("1","2","3","4","5")))
 
-#osm_weighted <- osm_graph %>%
-#  group_by(way_id) %>%
-#  summarize(road_importance = mean(d)/mean(time))
+osm_weighted <- osm_graph %>%
+  group_by(way_id) %>%
+  summarize(road_importance = round(mean(d)/mean(time)))
 
 #graph <- dodgr_contract_graph (osm_graph)
 #graph <- dodgr_centrality (osm_graph)
 
-osm_weighted <- osm_graph %>%
-  group_by(way_id) %>%
-  summarize(road_importance = sum(time_weighted))
+#osm_weighted <- osm_graph %>%
+#  group_by(way_id) %>%
+#  summarize(road_importance = sum(time_weighted))
 
 #osm_weighted <- graph %>%
 #  group_by(way_id) %>%
@@ -164,18 +164,26 @@ osm_urban$aadt_major = osm_urban$aadt # Duplicate AADT column for control
 
 is.na(osm_urban$aadt[2171])
 
-# Populate from nearest major road
+#Make sure major roads have the right original value
 
-for(k in 1:20){
+for(a in 1:nrow(osm_urban)){
+  if(osm_urban$roadtype[a] == "major"){
+    osm_urban$aadt_major[a] = osm_urban$aadt[a]
+  }
+}
+
+# Finish major roads (populate only major road)
+
+for(k in 1:50){
   for(i in 1:nrow(osm_urban)){
-    if(is.na(osm_urban$aadt[i])){
-      for(j in 1:ncol(nn_aadt$nn.idx)){
-        idx <- nn_aadt$nn.idx[i,j]
-        if(osm_urban$roadtype[idx] == "major"){
-          if(!is.na(osm_urban$aadt[idx])){
-            if(osm_urban$roadtype[idx] == "major"){
-            osm_urban$aadt[i] <- osm_urban$aadt[idx]
-            break
+    if(osm_urban$roadtype[i] == "major"){
+      if(is.na(osm_urban$aadt_major[i])){
+        for(j in 1:ncol(nn_aadt$nn.idx)){
+         idx <- nn_aadt$nn.idx[i,j]
+          if(osm_urban$roadtype[idx] == "major"){
+           if(!is.na(osm_urban$aadt_major[idx])){
+             osm_urban$aadt_major[i] <- osm_urban$aadt_major[idx]
+             break
             }
           }
         }
@@ -184,17 +192,58 @@ for(k in 1:20){
   }
 }
 
+qtm(osm_urban, lines.col = "aadt_major", lines.lwd = 3)
+
+# Populate minor roads from nearest major road
+
+for(k in 1:50){
+  for(i in 1:nrow(osm_urban)){
+    if(osm_urban$roadtype[i] == "minor"){
+        for(j in 1:ncol(nn_aadt$nn.idx)){
+          idx <- nn_aadt$nn.idx[i,j]
+          if(osm_urban$roadtype[idx] == "major"){
+            if(!is.na(osm_urban$aadt_major[idx])){
+              osm_urban$aadt_major[i] <- osm_urban$aadt_major[idx]
+              break
+          }
+        }
+      }
+    }
+  }
+}
+
+qtm(osm_urban, lines.col = "aadt_major", lines.lwd = 3)
+
+#for(k in 1:50){
+#  for(i in 1:nrow(osm_urban)){
+#    if(osm_urban$roadtype[i] == "minor"){
+#      for(j in 2:ncol(nn_aadt$nn.idx)){
+#        idx <- nn_aadt$nn.idx[i,j]
+#        if(osm_urban$roadtype[i] != osm_urban$roadtype[idx]){
+#          if(!is.na(osm_urban$aadt_major[idx])){
+#            osm_urban$aadt_major[i] <- osm_urban$aadt[idx]
+#            break
+#          }
+#        }
+#      }
+#    }
+#  }
+#}
+
+
+#qtm(osm_urban, lines.col = "aadt_major", lines.lwd = 3)
+#qtm(osm_urban, lines.col = "aadt", lines.lwd = 3)
 # Populate remaining minor roads
 
 for(k in 1:20){
   for(i in 1:nrow(osm_urban)){
-    if(is.na(osm_urban$aadt[i])){
+    if(is.na(osm_urban$aadt_major[i])){
       for(j in 1:ncol(nn_aadt$nn.idx)){
         idx <- nn_aadt$nn.idx[i,j]
         if(osm_urban$roadtype[idx] == osm_urban$roadtype[i]){
           if(!is.na(osm_urban$aadt[idx])){
             if(osm_urban$roadtype[idx] == "minor"){
-              osm_urban$aadt[i] <- osm_urban$aadt[idx]
+              osm_urban$aadt_major[i] <- osm_urban$aadt[idx]
               break
             }
           }
@@ -255,15 +304,15 @@ qtm(osm_urban, lines.col = "road_importance", lines.lwd = 3)
 
 # AADT = log(route_importance) + (OSM Road Type) + log(AADT on nearest major road) + (Urban or rural)
 
-osm_model <- osm_glm
+osm_model <- osm_glm %>% filter(!is.na(aadt_major))
 
 # Normalize continuous variables (AADT/Road Importance)
 
 #osm_model$aadt <- log(osm_model$aadt)
 #osm_model$road_importance <- log(osm_model$road_importance)
 #
-osm_model$aadt <- (osm_model$aadt-min(osm_model$aadt))/(max(osm_model$aadt)-min(osm_model$aadt))
-osm_model$road_importance <- (osm_model$road_importance-min(osm_model$road_importance))/(max(osm_model$road_importance)-min(osm_model$road_importance))
+#osm_model$aadt <- (osm_model$aadt-min(osm_model$aadt))/(max(osm_model$aadt)-min(osm_model$aadt))
+#osm_model$road_importance <- (osm_model$road_importance-min(osm_model$road_importance))/(max(osm_model$road_importance)-min(osm_model$road_importance))
 #
 #osm_model$road_importance <- as.numeric(factor(osm_model$road_importance))
 #osm_model$areatype <- factor(osm_model$areatype)
@@ -271,14 +320,14 @@ osm_model$road_importance <- (osm_model$road_importance-min(osm_model$road_impor
 
 str(osm_model)
 
-summary(fit <- glm(road_importance ~ roadtype + aadt + areatype, family="poisson", data = osm_model))
+summary(fit <- glm(aadt_major ~ log(road_importance) + roadtype + log(aadt) + areatype, family="poisson", data = osm_model))
 
-osm_proj <-predict(fit, osm_model,
+osm_proj <-predict(fit, osm_glm,
         type = "response")
 
-osm_model$osm_predict <- exp(osm_proj)
+osm_glm$osm_predict <- osm_proj
 
-aadt_minor <- osm_model %>% filter(roadtype == "minor", !is.na(aadt_major))
+aadt_minor <- osm_glm %>% filter(roadtype == "minor", !is.na(aadt_major))
 
 # ################################################################# #
 #### Accuracy tests                                              ####
