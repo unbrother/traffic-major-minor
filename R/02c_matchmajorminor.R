@@ -215,7 +215,7 @@ plot(traffic_minor$aadt[!is.na(traffic_minor$aadt)], predict(m1),
      ylab = "Predicted AADT",
      xlab= "Observed AADT")
 abline(0,1, col = "red")
-
+cor(traffic_minor$aadt[!is.na(traffic_minor$centrality)], predict(m1))
 
 # log model
 m2 <- lm(aadt ~ log(centrality) + log(major_aadt), data = traffic_minor)
