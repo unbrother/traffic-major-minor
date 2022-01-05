@@ -41,46 +41,8 @@ remotes::install_github("ITSleeds/RpackageTemplate")
 
 <!-- end list -->
 
-``` bash
-cd testPackage
-mv RpackageTemplate.Rproj yourPackageName.Rproj
-```
-
-  - Open the project in RStudio as follows:
-
-<!-- end list -->
-
-``` r
-rstudioapi::openProject("/path/to/yourPackageName")
-```
-
-## Continuous integration
-
-To add continuous integration, use the following commands:
-
-``` r
-# usethis::use_pkgdown()
-usethis::use_pkgdown_travis()
-travis::use_travis_deploy()
-```
-
-See these resources for further information:
-
-  - <https://pkgdown.r-lib.org/articles/pkgdown.html>
-  - <https://pkgdown.r-lib.org/reference/deploy_site_github.html>
-
 ## Acknowledgement
 
-Acknowledge all the fine people who helped build this package.
+Dr. Malcolm Morgan and Dr. Robin Lovelace.
 
-## Contribution
 
-Please note that the `RpackageTemplate` project is released with a
-[Contributor Code of Conduct](CODE_OF_CONDUCT.md). By contributing to
-this project, you agree to abide by its terms.
-
-## Package Status
-
-This package is part of ongoing research at the University of Leeds, it
-is provided “as is” and is likely to be updated and changed without
-warning to meet the research needs of the University.
